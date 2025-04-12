@@ -20,8 +20,6 @@ An MCP (Model Context Protocol) server for interacting with Android devices thro
 
 ## Installation
 
-### Option 1: Build from Source
-
 ```bash
 # Clone the repository
 git clone https://github.com/srmorete/adb-mcp.git
@@ -33,17 +31,7 @@ npm install
 # Build the TypeScript code
 npm run build
 
-# Link for global use
-npm link
-```
-
-### Option 2: Install from npm
-
-```bash
-# Install globally
-npm install -g adb-mcp
-
-# Or use npx without installing
+# Run the server
 npx adb-mcp
 ```
 
@@ -68,20 +56,6 @@ Add the ADB MCP server configuration:
          "command": "npx",
          "args": [
            "adb-mcp"
-         ]
-       }
-     }
-   }
-   ```
-
-If you **did not** installed globally, then use this other configuration:
-   ```json
-   {
-     "mcpServers": {
-       "adb": {
-         "command": "node",
-         "args": [
-           "/absolute/path/to/your/project/node_modules/adb-mcp/dist/index.js"
          ]
        }
      }
