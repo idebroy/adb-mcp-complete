@@ -10,8 +10,7 @@
     "build": "tsc",
     "start": "node dist/index.js",
     "dev": "tsc -w",
-    "test": "ts-node test/test-client.ts",
-    "prepublish": "npm run build"
+    "test": "ts-node test/test-client.ts"
   },
   "keywords": [
     "mcp",
@@ -21,7 +20,11 @@
     "typescript",
     "mcp server"
   ],
-  "author": "",
+  "author": "Martin Arellano <llano.mga@gmail.com>",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/srmorete/adb-mcp.git"
+  },
   "license": "MIT",
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.9.0",
