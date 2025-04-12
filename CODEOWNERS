@@ -1,6 +1,2 @@
-# This is a CODEOWNERS file for GitHub
-# It determines who gets automatically requested for review
-# when someone opens a pull request that modifies specific files.
-
 # Default owners for everything in the repo
 * @srmorete 
