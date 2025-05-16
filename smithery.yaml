@@ -1,0 +1,27 @@
+# Smithery configuration file: https://smithery.ai/docs/build/project-config
+
+startCommand:
+  type: stdio
+  configSchema:
+    # JSON Schema defining the configuration options for the MCP.
+    type: object
+    required: []
+    properties:
+      adbPath:
+        type: string
+        default: ""
+        description: Optional path to the adb binary
+  commandFunction:
+    # A JS function that produces the CLI command based on the given config to start the MCP on stdio.
+    |-
+    (config) => {
+      const env = {};
+      if (config.adbPath) env.ADB_PATH = config.adbPath;
+      return {
+        command: 'node',
+        args: ['dist/index.js'],
+        env
+      };
+    }
+  exampleConfig:
+    adbPath: /usr/bin/adb

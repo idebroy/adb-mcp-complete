@@ -1,4 +1,5 @@
 # ADB MCP Server
+[![smithery badge](https://smithery.ai/badge/@srmorete/adb-mcp)](https://smithery.ai/server/@srmorete/adb-mcp)
 
 An MCP (Model Context Protocol) server for interacting with Android devices through ADB. This TypeScript-based tool provides a bridge between AI models and Android device functionality.
 
@@ -20,6 +21,15 @@ An MCP (Model Context Protocol) server for interacting with Android devices thro
 
 ## Installation
 
+### Installing via Smithery
+
+To install ADB Android Device Server for Claude Desktop automatically via [Smithery](https://smithery.ai/server/@srmorete/adb-mcp):
+
+```bash
+npx -y @smithery/cli install @srmorete/adb-mcp --client claude
+```
+
+### Manual Installation
 ```bash
 # Clone the repository
 git clone https://github.com/srmorete/adb-mcp.git
