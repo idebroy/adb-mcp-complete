@@ -44,9 +44,9 @@ async function main(): Promise<void> {
     console.log("✅ Connected to ADB MCP server");
     
     // Get device list
-    console.log("\n=== Testing adb-devices ===");
+    console.log("\n=== Testing adb_devices ===");
     const devicesResult = await client.callTool({
-      name: "adb-devices",
+      name: "adb_devices",
       arguments: {}
     }) as ToolResponse;
     console.log(devicesResult);
@@ -60,9 +60,9 @@ async function main(): Promise<void> {
     console.log("✅ Device list response validated");
     
     // Test the screenshot tool with default (non-base64) behavior
-    console.log("\n=== Testing dump-image (default non-base64) ===");
+    console.log("\n=== Testing dump_image (default non-base64) ===");
     const screenshotDefaultResult = await client.callTool({
-      name: "dump-image",
+      name: "dump_image",
       arguments: {}
     }) as ToolResponse;
     
@@ -79,9 +79,9 @@ async function main(): Promise<void> {
     console.log("✅ Default screenshot response validated");
     
     // Test the screenshot tool with explicit base64 request
-    console.log("\n=== Testing dump-image (explicit base64) ===");
+    console.log("\n=== Testing dump_image (explicit base64) ===");
     const screenshotBase64Result = await client.callTool({
-      name: "dump-image",
+      name: "dump_image",
       arguments: {
         asBase64: true
       }
@@ -105,9 +105,9 @@ async function main(): Promise<void> {
     console.log("✅ Base64 screenshot response validated");
     
     // Test the UI dump tool
-    console.log("\n=== Testing inspect-ui ===");
+    console.log("\n=== Testing inspect_ui ===");
     const uidumpResult = await client.callTool({
-      name: "inspect-ui",
+      name: "inspect_ui",
       arguments: {
         asBase64: false
       }
@@ -153,10 +153,10 @@ async function main(): Promise<void> {
       console.log("✅ UI dump XML response validated");
     }
     
-    // Test adb-shell
-    console.log("\n=== Testing adb-shell ===");
+    // Test adb_shell
+    console.log("\n=== Testing adb_shell ===");
     const shellResult = await client.callTool({
-      name: "adb-shell",
+      name: "adb_shell",
       arguments: {
         command: "echo 'Test command execution'"
       }
