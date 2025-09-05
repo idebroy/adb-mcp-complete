@@ -173,6 +173,30 @@ async function main(): Promise<void> {
     const shellOutput = shellResult.content[0]?.text || '';
     assert(shellOutput.includes("Test command execution"), "Expected echo output in shell response");
     console.log("✅ Shell command response validated");
+
+    // Test adb_activity_manager 
+    // make sure the home screen is not visible before running this test
+    console.log("\n=== Testing adb_activity_manager (am start HOME) ===");
+    const amResult = await client.callTool({
+      name: "adb_activity_manager",
+      arguments: {
+        amCommand: "start",
+        amArgs: "-a android.intent.action.MAIN -c android.intent.category.HOME"
+        // device: undefined // Optionally specify device
+      }
+    }) as ToolResponse;
+
+    console.log("Activity Manager result:");
+    console.log(amResult);
+
+    // Assert Activity Manager response
+    assert(amResult.content, "Expected content in Activity Manager response");
+    assert(Array.isArray(amResult.content), "Expected content to be an array");
+    assert(amResult.content.length > 0, "Expected at least one content item");
+    assert(!amResult.isError, "Expected no error in Activity Manager response");
+    const amOutput = amResult.content[0]?.text || '';
+    assert(amOutput.length > 0, "Expected some output from Activity Manager");
+    console.log("✅ Activity Manager response validated");
     
     // Cleanup
     await client.close();
