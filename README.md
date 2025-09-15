@@ -103,6 +103,8 @@ All tools are available with the following naming convention:
 #### 📦 App Management
 
 - `adb_install` - Install an APK file using a local file path
+- `adb_package_manager` - Execute Package Manager (pm) commands - list packages, grant/revoke permissions, manage apps
+- `adb_activity_manager` - Execute Activity Manager (am) commands - start activities, broadcast intents, control app behavior
 
 #### 📋 Logging
 

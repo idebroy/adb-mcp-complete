@@ -198,6 +198,32 @@ async function main(): Promise<void> {
     assert(amOutput.length > 0, "Expected some output from Activity Manager");
     console.log("✅ Activity Manager response validated");
     
+    // Test adb_package_manager 
+    console.log("\n=== Testing adb_package_manager (pm list packages) ===");
+    const pmResult = await client.callTool({
+      name: "adb_package_manager",
+      arguments: {
+        pmCommand: "list",
+        pmArgs: "packages -3"
+        // device: undefined // Optionally specify device
+      }
+    }) as ToolResponse;
+
+    console.log("Package Manager result:");
+    console.log(pmResult);
+
+    // Assert Package Manager response
+    assert(pmResult.content, "Expected content in Package Manager response");
+    assert(Array.isArray(pmResult.content), "Expected content to be an array");
+    assert(pmResult.content.length > 0, "Expected at least one content item");
+    assert(!pmResult.isError, "Expected no error in Package Manager response");
+    const pmOutput = pmResult.content[0]?.text || '';
+    assert(pmOutput.length > 0, "Expected some output from Package Manager");
+    // Third-party packages list should contain package names
+    assert(pmOutput.includes("package:") || pmOutput.includes("No packages found") || pmOutput.length === 0, 
+           "Expected package list format or empty result");
+    console.log("✅ Package Manager response validated");
+    
     // Cleanup
     await client.close();
     console.log("\n✅ All tests passed - Disconnected from ADB MCP server");

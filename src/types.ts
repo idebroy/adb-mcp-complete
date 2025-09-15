@@ -89,6 +89,13 @@ export const adbActivityManagerSchema = z.object({
   device: z.string().optional().describe("Specific device ID (optional)")
 });
 
+// Package Manager tool schema
+export const adbPackageManagerSchema = z.object({
+  pmCommand: z.string().describe("Package Manager subcommand, e.g. 'list', 'install', 'uninstall', 'grant', 'revoke', etc."),
+  pmArgs: z.string().optional().describe("Arguments for the pm subcommand, e.g. 'packages', 'com.example.app android.permission.CAMERA'"),
+  device: z.string().optional().describe("Specific device ID (optional)")
+});
+
 
 
 // Zod schema objects
@@ -101,6 +108,7 @@ export const AdbPushSchema = z.object(adbPushInputSchema);
 export const AdbScreenshotSchema = z.object(dumpImageInputSchema);
 export const AdbUidumpSchema = z.object(inspectUiInputSchema);
 export const AdbActivityManagerSchema = adbActivityManagerSchema;
+export const AdbPackageManagerSchema = adbPackageManagerSchema;
 
 // Input type definitions
 export type AdbDevicesInput = z.infer<typeof AdbDevicesSchema>;
@@ -112,3 +120,4 @@ export type AdbPushInput = z.infer<typeof AdbPushSchema>;
 export type AdbScreenshotInput = z.infer<typeof AdbScreenshotSchema>;
 export type AdbUidumpInput = z.infer<typeof AdbUidumpSchema>; 
 export type AdbActivityManagerInput = z.infer<typeof AdbActivityManagerSchema>;
+export type AdbPackageManagerInput = z.infer<typeof AdbPackageManagerSchema>;
