@@ -41,6 +41,8 @@ import {
   AdbPushSchema,
   AdbScreenshotSchema,
   AdbUidumpSchema,
+  AdbActivityManagerSchema,
+  AdbPackageManagerSchema,
   RequestHandlerExtra
 } from "./types";
 
@@ -181,34 +183,45 @@ async function executeAdbCommand(command: string, errorMessage: string) {
   try {
     log(LogLevel.DEBUG, `Executing command: ${command}`);
     const { stdout, stderr } = await execPromise(command);
-    
+
     // Some ADB commands output to stderr but are not errors
     if (stderr && !stdout.includes("List of devices attached") && !stdout.includes("Success")) {
+      // Treat 'Warning: Activity not started, its current task has been brought to the front' as non-error
+      if (stderr.includes("Warning: Activity not started, its current task has been brought to the front")) {
+        log(LogLevel.WARN, `Command warning (not error): ${stderr}`);
+        return {
+          content: [{
+            type: "text" as const,
+            text: stderr.replace(/^Error: /, "") // Remove any 'Error: ' prefix if present
+          }]
+          // Do NOT set isError
+        };
+      }
       log(LogLevel.ERROR, `Command error: ${stderr}`);
       return {
-        content: [{ 
-          type: "text" as const, 
-          text: `Error: ${stderr}` 
+        content: [{
+          type: "text" as const,
+          text: `Error: ${stderr}`
         }],
         isError: true
       };
     }
-    
+
     log(LogLevel.DEBUG, `Command successful: ${command}`);
     log(LogLevel.INFO, `ADB command executed successfully: ${command.split(' ')[1] || command}`);
     return {
-      content: [{ 
-        type: "text" as const, 
-        text: stdout || "Command executed successfully" 
+      content: [{
+        type: "text" as const,
+        text: stdout || "Command executed successfully"
       }]
     };
   } catch (error) {
     const errorMsg = error instanceof Error ? error.message : String(error);
     log(LogLevel.ERROR, `${errorMessage}: ${errorMsg}`);
     return {
-      content: [{ 
-        type: "text" as const, 
-        text: `${errorMessage}: ${errorMsg}` 
+      content: [{
+        type: "text" as const,
+        text: `${errorMessage}: ${errorMsg}`
       }],
       isError: true
     };
@@ -589,6 +602,46 @@ server.tool(
     }
   },
   { description: ADB_DUMP_IMAGE_TOOL_DESCRIPTION }
+);
+
+// ===== Activity Manager Tool =====
+const ADB_ACTIVITY_MANAGER_TOOL_DESCRIPTION =
+  "Executes Activity Manager (am) commands on a connected Android device. " +
+  "Supports starting activities, broadcasting intents, force-stopping packages, and other 'am' subcommands. " +
+  "Specify the subcommand (e.g. 'start', 'broadcast', 'force-stop') and arguments as you would in adb shell am. " +
+  "Example: amCommand='start', amArgs='-a android.intent.action.VIEW -d http://www.example.com'";
+
+server.tool(
+  "adb_activity_manager",
+  AdbActivityManagerSchema.shape,
+  async (args: z.infer<typeof AdbActivityManagerSchema>, _extra: RequestHandlerExtra) => {
+    log(LogLevel.INFO, `Executing Activity Manager command: am ${args.amCommand} ${args.amArgs || ''}`);
+    const deviceArg = args.device ? `-s ${args.device} ` : "";
+    const amArgs = args.amArgs ? ` ${args.amArgs}` : "";
+    const command = `adb ${deviceArg}shell am ${args.amCommand}${amArgs}`;
+    return executeAdbCommand(command, "Error executing Activity Manager command");
+  },
+  { description: ADB_ACTIVITY_MANAGER_TOOL_DESCRIPTION }
+);
+
+// ===== Package Manager Tool =====
+const ADB_PACKAGE_MANAGER_TOOL_DESCRIPTION =
+  "Executes Package Manager (pm) commands on a connected Android device. " +
+  "Supports listing packages, installing/uninstalling apps, managing permissions, and other 'pm' subcommands. " +
+  "Common commands include: 'list packages', 'install', 'uninstall', 'grant', 'revoke', 'clear', 'enable', 'disable'. " +
+  "Example: pmCommand='list', pmArgs='packages -3' (lists third-party packages) or pmCommand='grant', pmArgs='com.example.app android.permission.CAMERA'";
+
+server.tool(
+  "adb_package_manager",
+  AdbPackageManagerSchema.shape,
+  async (args: z.infer<typeof AdbPackageManagerSchema>, _extra: RequestHandlerExtra) => {
+    log(LogLevel.INFO, `Executing Package Manager command: pm ${args.pmCommand} ${args.pmArgs || ''}`);
+    const deviceArg = args.device ? `-s ${args.device} ` : "";
+    const pmArgs = args.pmArgs ? ` ${args.pmArgs}` : "";
+    const command = `adb ${deviceArg}shell pm ${args.pmCommand}${pmArgs}`;
+    return executeAdbCommand(command, "Error executing Package Manager command");
+  },
+  { description: ADB_PACKAGE_MANAGER_TOOL_DESCRIPTION }
 );
 
 // ========== Server Startup ==========

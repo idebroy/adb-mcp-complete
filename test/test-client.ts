@@ -44,9 +44,9 @@ async function main(): Promise<void> {
     console.log("✅ Connected to ADB MCP server");
     
     // Get device list
-    console.log("\n=== Testing adb-devices ===");
+    console.log("\n=== Testing adb_devices ===");
     const devicesResult = await client.callTool({
-      name: "adb-devices",
+      name: "adb_devices",
       arguments: {}
     }) as ToolResponse;
     console.log(devicesResult);
@@ -60,9 +60,9 @@ async function main(): Promise<void> {
     console.log("✅ Device list response validated");
     
     // Test the screenshot tool with default (non-base64) behavior
-    console.log("\n=== Testing dump-image (default non-base64) ===");
+    console.log("\n=== Testing dump_image (default non-base64) ===");
     const screenshotDefaultResult = await client.callTool({
-      name: "dump-image",
+      name: "dump_image",
       arguments: {}
     }) as ToolResponse;
     
@@ -79,9 +79,9 @@ async function main(): Promise<void> {
     console.log("✅ Default screenshot response validated");
     
     // Test the screenshot tool with explicit base64 request
-    console.log("\n=== Testing dump-image (explicit base64) ===");
+    console.log("\n=== Testing dump_image (explicit base64) ===");
     const screenshotBase64Result = await client.callTool({
-      name: "dump-image",
+      name: "dump_image",
       arguments: {
         asBase64: true
       }
@@ -105,9 +105,9 @@ async function main(): Promise<void> {
     console.log("✅ Base64 screenshot response validated");
     
     // Test the UI dump tool
-    console.log("\n=== Testing inspect-ui ===");
+    console.log("\n=== Testing inspect_ui ===");
     const uidumpResult = await client.callTool({
-      name: "inspect-ui",
+      name: "inspect_ui",
       arguments: {
         asBase64: false
       }
@@ -153,10 +153,10 @@ async function main(): Promise<void> {
       console.log("✅ UI dump XML response validated");
     }
     
-    // Test adb-shell
-    console.log("\n=== Testing adb-shell ===");
+    // Test adb_shell
+    console.log("\n=== Testing adb_shell ===");
     const shellResult = await client.callTool({
-      name: "adb-shell",
+      name: "adb_shell",
       arguments: {
         command: "echo 'Test command execution'"
       }
@@ -173,6 +173,56 @@ async function main(): Promise<void> {
     const shellOutput = shellResult.content[0]?.text || '';
     assert(shellOutput.includes("Test command execution"), "Expected echo output in shell response");
     console.log("✅ Shell command response validated");
+
+    // Test adb_activity_manager 
+    // make sure the home screen is not visible before running this test
+    console.log("\n=== Testing adb_activity_manager (am start HOME) ===");
+    const amResult = await client.callTool({
+      name: "adb_activity_manager",
+      arguments: {
+        amCommand: "start",
+        amArgs: "-a android.intent.action.MAIN -c android.intent.category.HOME"
+        // device: undefined // Optionally specify device
+      }
+    }) as ToolResponse;
+
+    console.log("Activity Manager result:");
+    console.log(amResult);
+
+    // Assert Activity Manager response
+    assert(amResult.content, "Expected content in Activity Manager response");
+    assert(Array.isArray(amResult.content), "Expected content to be an array");
+    assert(amResult.content.length > 0, "Expected at least one content item");
+    assert(!amResult.isError, "Expected no error in Activity Manager response");
+    const amOutput = amResult.content[0]?.text || '';
+    assert(amOutput.length > 0, "Expected some output from Activity Manager");
+    console.log("✅ Activity Manager response validated");
+    
+    // Test adb_package_manager 
+    console.log("\n=== Testing adb_package_manager (pm list packages) ===");
+    const pmResult = await client.callTool({
+      name: "adb_package_manager",
+      arguments: {
+        pmCommand: "list",
+        pmArgs: "packages -3"
+        // device: undefined // Optionally specify device
+      }
+    }) as ToolResponse;
+
+    console.log("Package Manager result:");
+    console.log(pmResult);
+
+    // Assert Package Manager response
+    assert(pmResult.content, "Expected content in Package Manager response");
+    assert(Array.isArray(pmResult.content), "Expected content to be an array");
+    assert(pmResult.content.length > 0, "Expected at least one content item");
+    assert(!pmResult.isError, "Expected no error in Package Manager response");
+    const pmOutput = pmResult.content[0]?.text || '';
+    assert(pmOutput.length > 0, "Expected some output from Package Manager");
+    // Third-party packages list should contain package names
+    assert(pmOutput.includes("package:") || pmOutput.includes("No packages found") || pmOutput.length === 0, 
+           "Expected package list format or empty result");
+    console.log("✅ Package Manager response validated");
     
     // Cleanup
     await client.close();

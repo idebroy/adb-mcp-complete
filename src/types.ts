@@ -82,6 +82,22 @@ export const inspectUiInputSchema = {
   asBase64: z.boolean().optional().default(false).describe("Return XML content as base64 (default: false)")
 };
 
+// Activity Manager tool schema
+export const adbActivityManagerSchema = z.object({
+  amCommand: z.string().describe("Activity Manager subcommand, e.g. 'start', 'broadcast', 'force-stop', etc."),
+  amArgs: z.string().optional().describe("Arguments for the am subcommand, e.g. '-a android.intent.action.VIEW'"),
+  device: z.string().optional().describe("Specific device ID (optional)")
+});
+
+// Package Manager tool schema
+export const adbPackageManagerSchema = z.object({
+  pmCommand: z.string().describe("Package Manager subcommand, e.g. 'list', 'install', 'uninstall', 'grant', 'revoke', etc."),
+  pmArgs: z.string().optional().describe("Arguments for the pm subcommand, e.g. 'packages', 'com.example.app android.permission.CAMERA'"),
+  device: z.string().optional().describe("Specific device ID (optional)")
+});
+
+
+
 // Zod schema objects
 export const AdbDevicesSchema = z.object(adbDevicesInputSchema);
 export const AdbShellSchema = z.object(adbShellInputSchema);
@@ -91,6 +107,8 @@ export const AdbPullSchema = z.object(adbPullInputSchema);
 export const AdbPushSchema = z.object(adbPushInputSchema);
 export const AdbScreenshotSchema = z.object(dumpImageInputSchema);
 export const AdbUidumpSchema = z.object(inspectUiInputSchema);
+export const AdbActivityManagerSchema = adbActivityManagerSchema;
+export const AdbPackageManagerSchema = adbPackageManagerSchema;
 
 // Input type definitions
 export type AdbDevicesInput = z.infer<typeof AdbDevicesSchema>;
@@ -101,3 +119,5 @@ export type AdbPullInput = z.infer<typeof AdbPullSchema>;
 export type AdbPushInput = z.infer<typeof AdbPushSchema>;
 export type AdbScreenshotInput = z.infer<typeof AdbScreenshotSchema>;
 export type AdbUidumpInput = z.infer<typeof AdbUidumpSchema>; 
+export type AdbActivityManagerInput = z.infer<typeof AdbActivityManagerSchema>;
+export type AdbPackageManagerInput = z.infer<typeof AdbPackageManagerSchema>;
