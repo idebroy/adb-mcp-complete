@@ -18,7 +18,7 @@
 
 // Import dependencies using require for better compatibility
 import { z } from "zod";
-import { exec } from "child_process";
+import { execFile, ExecFileOptionsWithStringEncoding } from "child_process";
 import { promisify } from "util";
 import { writeFile, unlink, readFile } from "fs";
 import { join, basename } from "path";
@@ -46,11 +46,26 @@ import {
   RequestHandlerExtra
 } from "./types";
 
-// Promisify exec and fs functions
-const execPromise = promisify(exec);
+// Promisify execFile and fs functions
+const execFilePromise = promisify(execFile);
 const writeFilePromise = promisify(writeFile);
 const unlinkPromise = promisify(unlink);
 const readFilePromise = promisify(readFile);
+
+const DEFAULT_EXEC_OPTIONS: ExecFileOptionsWithStringEncoding = {
+  encoding: "utf8",
+  maxBuffer: 10 * 1024 * 1024
+};
+
+type ExecResult = { stdout: string; stderr: string };
+
+async function runAdb(args: string[], options?: ExecFileOptionsWithStringEncoding): Promise<ExecResult> {
+  const execOptions: ExecFileOptionsWithStringEncoding = {
+    ...DEFAULT_EXEC_OPTIONS,
+    ...(options ?? {})
+  };
+  return execFilePromise("adb", args, execOptions) as Promise<ExecResult>;
+}
 
 // ========== Tool Descriptions ==========
 
@@ -179,36 +194,43 @@ function log(level: LogLevel, message: string, ...args: any[]): void {
  * @param errorMessage - Error message prefix in case of failure
  * @returns Result object with content and optional isError flag
  */
-async function executeAdbCommand(command: string, errorMessage: string) {
+async function executeAdbCommand(args: string[], errorMessage: string) {
+  const commandString = ["adb", ...args].join(" ");
   try {
-    log(LogLevel.DEBUG, `Executing command: ${command}`);
-    const { stdout, stderr } = await execPromise(command);
+    log(LogLevel.DEBUG, `Executing command: ${commandString}`);
+    const { stdout, stderr } = await runAdb(args);
+    const stderrText = stderr.trim();
 
     // Some ADB commands output to stderr but are not errors
-    if (stderr && !stdout.includes("List of devices attached") && !stdout.includes("Success")) {
-      // Treat 'Warning: Activity not started, its current task has been brought to the front' as non-error
-      if (stderr.includes("Warning: Activity not started, its current task has been brought to the front")) {
-        log(LogLevel.WARN, `Command warning (not error): ${stderr}`);
+    if (stderrText && !stdout.includes("List of devices attached") && !stdout.includes("Success")) {
+      const nonErrorWarnings = [
+        "Warning: Activity not started, its current task has been brought to the front",
+        "Warning: Activity not started, intent has been delivered to currently running top-most instance."
+      ];
+
+      if (nonErrorWarnings.some((warning) => stderrText.includes(warning))) {
+        log(LogLevel.WARN, `Command warning (not error): ${stderrText}`);
         return {
           content: [{
             type: "text" as const,
-            text: stderr.replace(/^Error: /, "") // Remove any 'Error: ' prefix if present
+            text: stderrText.replace(/^Error: /, "") // Remove any 'Error: ' prefix if present
           }]
           // Do NOT set isError
         };
       }
-      log(LogLevel.ERROR, `Command error: ${stderr}`);
+      log(LogLevel.ERROR, `Command error: ${stderrText}`);
       return {
         content: [{
           type: "text" as const,
-          text: `Error: ${stderr}`
+          text: `Error: ${stderrText}`
         }],
         isError: true
       };
     }
 
-    log(LogLevel.DEBUG, `Command successful: ${command}`);
-    log(LogLevel.INFO, `ADB command executed successfully: ${command.split(' ')[1] || command}`);
+    log(LogLevel.DEBUG, `Command successful: ${commandString}`);
+    const commandSummary = args[0] ? `${args[0]}` : commandString;
+    log(LogLevel.INFO, `ADB command executed successfully: ${commandSummary}`);
     return {
       content: [{
         type: "text" as const,
@@ -260,8 +282,59 @@ async function cleanupTempFile(filePath: string): Promise<void> {
  * @param device - Device ID
  * @returns Formatted device argument
  */
-function formatDeviceArg(device?: string): string {
-  return device ? `-s ${device} ` : '';
+function buildDeviceArgs(device?: string): string[] {
+  return device ? ["-s", device] : [];
+}
+
+function splitCommandArguments(value: string): string[] {
+  const args: string[] = [];
+  let current = "";
+  let inSingleQuote = false;
+  let inDoubleQuote = false;
+  let escapeNext = false;
+
+  for (const char of value) {
+    if (escapeNext) {
+      current += char;
+      escapeNext = false;
+      continue;
+    }
+
+    if (char === "\\") {
+      escapeNext = true;
+      continue;
+    }
+
+    if (char === "'" && !inDoubleQuote) {
+      inSingleQuote = !inSingleQuote;
+      continue;
+    }
+
+    if (char === '"' && !inSingleQuote) {
+      inDoubleQuote = !inDoubleQuote;
+      continue;
+    }
+
+    if (/\s/.test(char) && !inSingleQuote && !inDoubleQuote) {
+      if (current.length > 0) {
+        args.push(current);
+        current = "";
+      }
+      continue;
+    }
+
+    current += char;
+  }
+
+  if (escapeNext) {
+    current += "\\";
+  }
+
+  if (current.length > 0) {
+    args.push(current);
+  }
+
+  return args;
 }
 
 // ========== Server Setup ==========
@@ -281,7 +354,7 @@ server.resource(
   "adb://version",
   async (uri: URL) => {
     try {
-      const { stdout } = await execPromise("adb version");
+      const { stdout } = await runAdb(["version"]);
       return {
         contents: [{
           uri: uri.href,
@@ -308,7 +381,7 @@ server.resource(
   "adb://devices",
   async (uri: URL) => {
     try {
-      const { stdout } = await execPromise("adb devices -l");
+      const { stdout } = await runAdb(["devices", "-l"]);
       return {
         contents: [{
           uri: uri.href,
@@ -339,7 +412,7 @@ server.tool(
   AdbDevicesSchema.shape,
   async (_args: Record<string, never>, _extra: RequestHandlerExtra) => {
     log(LogLevel.INFO, "Listing connected devices");
-    return executeAdbCommand("adb devices", "Error executing adb devices");
+    return executeAdbCommand(["devices"], "Error executing adb devices");
   },
   { description: ADB_DEVICES_TOOL_DESCRIPTION }
 );
@@ -351,21 +424,21 @@ server.tool(
   async (args: z.infer<typeof AdbUidumpSchema>, _extra: RequestHandlerExtra) => {
     log(LogLevel.INFO, "Dumping UI hierarchy");
     
-    const deviceArg = formatDeviceArg(args.device);
+    const deviceArgs = buildDeviceArgs(args.device);
     const tempFilePath = createTempFilePath("adb-mcp", "window_dump.xml");
-    const remotePath = args.outputPath || "/sdcard/window_dump.xml";
+    const remotePath = args.outputPath && args.outputPath.trim()
+      ? args.outputPath.trim()
+      : "/sdcard/window_dump.xml";
     
     try {
       // Dump UI hierarchy on device
-      const dumpCommand = `adb ${deviceArg}shell uiautomator dump ${remotePath}`;
-      await execPromise(dumpCommand);
+      await runAdb([...deviceArgs, "shell", "uiautomator", "dump", remotePath]);
       
       // Pull the UI dump from the device
-      const pullCommand = `adb ${deviceArg}pull ${remotePath} ${tempFilePath}`;
-      await execPromise(pullCommand);
+      await runAdb([...deviceArgs, "pull", remotePath, tempFilePath]);
       
       // Clean up the remote file
-      await execPromise(`adb ${deviceArg}shell rm ${remotePath}`);
+      await runAdb([...deviceArgs, "shell", "rm", remotePath]);
       
       // Return the UI dump
       if (args.asBase64 !== false) {
@@ -408,10 +481,18 @@ server.tool(
   async (args: z.infer<typeof AdbShellSchema>, _extra: RequestHandlerExtra) => {
     log(LogLevel.INFO, `Executing shell command: ${args.command}`);
     
-    const deviceArg = formatDeviceArg(args.device);
-    const command = `adb ${deviceArg}shell "${args.command.replace(/"/g, '\\"')}"`;
-    
-    return executeAdbCommand(command, "Error executing shell command");
+    const deviceArgs = buildDeviceArgs(args.device);
+    const trimmedCommand = args.command.trim();
+    if (!trimmedCommand) {
+      const message = "Shell command must not be empty";
+      log(LogLevel.ERROR, message);
+      return {
+        content: [{ type: "text" as const, text: message }],
+        isError: true
+      };
+    }
+
+    return executeAdbCommand([...deviceArgs, "shell", trimmedCommand], "Error executing shell command");
   },
   { description: ADB_SHELL_TOOL_DESCRIPTION }
 );
@@ -425,10 +506,13 @@ server.tool(
     
     try {
       // Install the APK using the provided file path
-      const deviceArg = formatDeviceArg(args.device);
-      const command = `adb ${deviceArg}install -r "${args.apkPath}"`;
-      
-      const result = await executeAdbCommand(command, "Error installing APK");
+      const deviceArgs = buildDeviceArgs(args.device);
+      const apkPath = args.apkPath.trim();
+      if (!apkPath) {
+        throw new Error("APK path must not be empty");
+      }
+
+      const result = await executeAdbCommand([...deviceArgs, "install", "-r", apkPath], "Error installing APK");
       if (!result.isError) {
         log(LogLevel.INFO, "APK installed successfully");
       }
@@ -454,10 +538,31 @@ server.tool(
     const filterExpr = args.filter ? args.filter : "";
     log(LogLevel.INFO, `Reading logcat (${lines} lines, filter: ${filterExpr || 'none'})`);
     
-    const deviceArg = formatDeviceArg(args.device);
-    const command = `adb ${deviceArg}logcat -d ${filterExpr} | tail -n ${lines}`;
-    
-    return executeAdbCommand(command, "Error reading logcat");
+    const deviceArgs = buildDeviceArgs(args.device);
+    const filterArgs = filterExpr ? splitCommandArguments(filterExpr) : [];
+    const adbArgs = [...deviceArgs, "logcat", "-d", ...filterArgs];
+
+    try {
+      const { stdout, stderr } = await runAdb(adbArgs);
+      if (stderr) {
+        log(LogLevel.WARN, `logcat returned stderr: ${stderr}`);
+      }
+
+      const logLines = stdout.split(/\r?\n/);
+      const limitedLines = lines > 0 ? logLines.slice(-lines) : logLines;
+      const text = limitedLines.join("\n");
+
+      return {
+        content: [{ type: "text" as const, text }]
+      };
+    } catch (error) {
+      const errorMsg = error instanceof Error ? error.message : String(error);
+      log(LogLevel.ERROR, `Error reading logcat: ${errorMsg}`);
+      return {
+        content: [{ type: "text" as const, text: `Error reading logcat: ${errorMsg}` }],
+        isError: true
+      };
+    }
   },
   { description: ADB_LOGCAT_TOOL_DESCRIPTION }
 );
@@ -469,16 +574,19 @@ server.tool(
   async (args: z.infer<typeof AdbPullSchema>, _extra: RequestHandlerExtra) => {
     log(LogLevel.INFO, `Pulling file from device: ${args.remotePath}`);
     
-    const deviceArg = formatDeviceArg(args.device);
+    const deviceArgs = buildDeviceArgs(args.device);
     const tempFilePath = createTempFilePath("adb-mcp", basename(args.remotePath));
     
     try {
       // Pull the file from the device
-      const pullCommand = `adb ${deviceArg}pull "${args.remotePath}" "${tempFilePath}"`;
-      const pullResult = await execPromise(pullCommand);
-      
-      if (pullResult.stderr && !pullResult.stdout.includes("1 file pulled")) {
-        throw new Error(pullResult.stderr);
+      const remotePath = args.remotePath.trim();
+      if (!remotePath) {
+        throw new Error("Remote path must not be empty");
+      }
+
+      const { stdout, stderr } = await runAdb([...deviceArgs, "pull", remotePath, tempFilePath]);
+      if (stderr) {
+        log(LogLevel.WARN, `adb pull reported stderr: ${stderr}`);
       }
       
       // If asBase64 is true (default), read the file and return as base64
@@ -486,15 +594,15 @@ server.tool(
         const fileData = await readFilePromise(tempFilePath);
         const base64Data = fileData.toString('base64');
         
-        log(LogLevel.INFO, `File pulled from device successfully: ${args.remotePath}`);
+        log(LogLevel.INFO, `File pulled from device successfully: ${remotePath}`);
         return {
           content: [{ type: "text" as const, text: base64Data }]
         };
       } else {
         // Otherwise return the pull operation result
-        log(LogLevel.INFO, `File pulled from device successfully: ${args.remotePath}`);
+        log(LogLevel.INFO, `File pulled from device successfully: ${remotePath}`);
         return {
-          content: [{ type: "text" as const, text: pullResult.stdout }]
+          content: [{ type: "text" as const, text: stdout }]
         };
       }
     } catch (error) {
@@ -519,7 +627,7 @@ server.tool(
   async (args: z.infer<typeof AdbPushSchema>, _extra: RequestHandlerExtra) => {
     log(LogLevel.INFO, `Pushing file to device: ${args.remotePath}`);
     
-    const deviceArg = formatDeviceArg(args.device);
+    const deviceArgs = buildDeviceArgs(args.device);
     const tempFilePath = createTempFilePath("adb-mcp", basename(args.remotePath));
     
     try {
@@ -528,10 +636,14 @@ server.tool(
       await writeFilePromise(tempFilePath, fileData);
       
       // Push the temporary file to the device
-      const command = `adb ${deviceArg}push "${tempFilePath}" "${args.remotePath}"`;
-      const result = await executeAdbCommand(command, "Error pushing file");
+      const remotePath = args.remotePath.trim();
+      if (!remotePath) {
+        throw new Error("Remote path must not be empty");
+      }
+
+      const result = await executeAdbCommand([...deviceArgs, "push", tempFilePath, remotePath], "Error pushing file");
       if (!result.isError) {
-        log(LogLevel.INFO, `File pushed to device successfully: ${args.remotePath}`);
+        log(LogLevel.INFO, `File pushed to device successfully: ${remotePath}`);
       }
       return result;
       
@@ -557,21 +669,19 @@ server.tool(
   async (args: z.infer<typeof AdbScreenshotSchema>, _extra: RequestHandlerExtra) => {
     log(LogLevel.INFO, "Taking device screenshot");
     
-    const deviceArg = formatDeviceArg(args.device);
+    const deviceArgs = buildDeviceArgs(args.device);
     const tempFilePath = createTempFilePath("adb-mcp", "screenshot.png");
     const remotePath = "/sdcard/screenshot.png";
     
     try {
       // Take screenshot on the device
-      const screenshotCommand = `adb ${deviceArg}shell screencap -p ${remotePath}`;
-      await execPromise(screenshotCommand);
+      await runAdb([...deviceArgs, "shell", "screencap", "-p", remotePath]);
       
       // Pull the screenshot from the device
-      const pullCommand = `adb ${deviceArg}pull ${remotePath} ${tempFilePath}`;
-      await execPromise(pullCommand);
+      await runAdb([...deviceArgs, "pull", remotePath, tempFilePath]);
       
       // Clean up the remote file
-      await execPromise(`adb ${deviceArg}shell rm ${remotePath}`);
+      await runAdb([...deviceArgs, "shell", "rm", remotePath]);
       
       // Read the screenshot file
       const imageData = await readFilePromise(tempFilePath);
@@ -616,10 +726,19 @@ server.tool(
   AdbActivityManagerSchema.shape,
   async (args: z.infer<typeof AdbActivityManagerSchema>, _extra: RequestHandlerExtra) => {
     log(LogLevel.INFO, `Executing Activity Manager command: am ${args.amCommand} ${args.amArgs || ''}`);
-    const deviceArg = args.device ? `-s ${args.device} ` : "";
-    const amArgs = args.amArgs ? ` ${args.amArgs}` : "";
-    const command = `adb ${deviceArg}shell am ${args.amCommand}${amArgs}`;
-    return executeAdbCommand(command, "Error executing Activity Manager command");
+    const deviceArgs = buildDeviceArgs(args.device);
+    const amCommand = args.amCommand.trim();
+    if (!amCommand) {
+      const message = "Activity Manager command must not be empty";
+      log(LogLevel.ERROR, message);
+      return {
+        content: [{ type: "text" as const, text: message }],
+        isError: true
+      };
+    }
+
+    const additionalArgs = args.amArgs ? splitCommandArguments(args.amArgs) : [];
+    return executeAdbCommand([...deviceArgs, "shell", "am", amCommand, ...additionalArgs], "Error executing Activity Manager command");
   },
   { description: ADB_ACTIVITY_MANAGER_TOOL_DESCRIPTION }
 );
@@ -636,10 +755,19 @@ server.tool(
   AdbPackageManagerSchema.shape,
   async (args: z.infer<typeof AdbPackageManagerSchema>, _extra: RequestHandlerExtra) => {
     log(LogLevel.INFO, `Executing Package Manager command: pm ${args.pmCommand} ${args.pmArgs || ''}`);
-    const deviceArg = args.device ? `-s ${args.device} ` : "";
-    const pmArgs = args.pmArgs ? ` ${args.pmArgs}` : "";
-    const command = `adb ${deviceArg}shell pm ${args.pmCommand}${pmArgs}`;
-    return executeAdbCommand(command, "Error executing Package Manager command");
+    const deviceArgs = buildDeviceArgs(args.device);
+    const pmCommand = args.pmCommand.trim();
+    if (!pmCommand) {
+      const message = "Package Manager command must not be empty";
+      log(LogLevel.ERROR, message);
+      return {
+        content: [{ type: "text" as const, text: message }],
+        isError: true
+      };
+    }
+
+    const additionalArgs = args.pmArgs ? splitCommandArguments(args.pmArgs) : [];
+    return executeAdbCommand([...deviceArgs, "shell", "pm", pmCommand, ...additionalArgs], "Error executing Package Manager command");
   },
   { description: ADB_PACKAGE_MANAGER_TOOL_DESCRIPTION }
 );
@@ -655,7 +783,7 @@ async function runServer(): Promise<void> {
     
     // Check ADB availability
     try {
-      const { stdout } = await execPromise("adb version");
+      const { stdout } = await runAdb(["version"]);
       log(LogLevel.INFO, `ADB detected: ${stdout.split('\n')[0]}`);
     } catch (error) {
       log(LogLevel.WARN, "ADB not found in PATH. Please ensure Android Debug Bridge is installed and in your PATH.");
