@@ -204,7 +204,7 @@ async function main(): Promise<void> {
       name: "adb_package_manager",
       arguments: {
         pmCommand: "list",
-        pmArgs: "packages -3"
+        pmArgs: "packages"
         // device: undefined // Optionally specify device
       }
     }) as ToolResponse;
